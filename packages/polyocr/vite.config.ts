@@ -17,7 +17,7 @@ const externals = [
   'franc',
   'jszip',
   'better-sqlite3',
-  'canvas',
+  '@napi-rs/canvas',
   'node:fs',
   'node:path',
   'node:crypto',

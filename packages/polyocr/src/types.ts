@@ -489,12 +489,12 @@ export interface ExportOptions {
  */
 export class PolyOCRError extends Error {
   public readonly code: PolyOCRErrorCode;
-  public readonly cause?: unknown;
+  public override readonly cause?: unknown;
   constructor(code: PolyOCRErrorCode, message: string, cause?: unknown) {
     super(message);
     this.name = 'PolyOCRError';
     this.code = code;
-    this.cause = cause;
+    if (cause !== undefined) this.cause = cause;
   }
 }
 

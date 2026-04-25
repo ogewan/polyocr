@@ -2,10 +2,40 @@
  * Public entry point for the polyocr package.
  *
  * Re-exports the `PolyOCR` class, every type from `types.ts`, and the formal
- * adapter interfaces. Consumers should import from `'polyocr'` — the deeper paths
- * (`'polyocr/adapters'`, etc.) are exposed for advanced use only.
- *
- * Phase 1 wires this up with the actual `PolyOCR` class. Phase 0 leaves it empty
- * to keep the package buildable while the implementation files are still stubs.
+ * adapter interfaces. Consumers should import from `'polyocr'` — the deeper
+ * paths (`'polyocr/adapters'`, etc.) are exposed for advanced use.
  */
-export {};
+
+export { PolyOCR } from './PolyOCR.js';
+export { PolyOCRError } from './types.js';
+export type {
+  PolyOCRInput,
+  PolyOCRConfig,
+  PolyOCRErrorCode,
+  OcrAdapter,
+  OcrOptions,
+  OcrResult,
+  RecognizedRegion,
+  RegionDetector,
+  DetectOptions,
+  RegionReference,
+  TranslationAdapter,
+  CacheProvider,
+  BoundingBox,
+  MaskRegion,
+  ProcessResult,
+  ProcessTimings,
+  OutputSpec,
+  BatchOptions,
+  ExportOptions,
+  RenderOptions,
+  InpaintMode,
+  FontConfig
+} from './types.js';
+
+// Convenience re-exports for the common adapters.
+export { TesseractAdapter } from './ocr/tesseract.js';
+export { OllamaTranslationAdapter } from './translate/ollama.js';
+export { MemoryCache, hashImageData } from './cache.js';
+export { detectLanguage, detectFromImage } from './langdetect.js';
+export { normalize, extractChromaMask } from './ingest.js';

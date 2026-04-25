@@ -51,3 +51,6 @@ desktop.ini
 # Logs
 logs/
 *.log
+
+# Misc
+samples/
