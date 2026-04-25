@@ -11,6 +11,7 @@
  */
 
 export { TesseractAdapter } from './ocr/tesseract.js';
+export { PaddleOCRAdapter } from './ocr/paddleocr.js';
 export { OllamaTranslationAdapter } from './translate/ollama.js';
 export { OpenCVDetector } from './detect/opencv.js';
 export { LLMDetector } from './detect/llm.js';

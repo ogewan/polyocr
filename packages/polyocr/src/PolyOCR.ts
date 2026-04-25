@@ -36,6 +36,8 @@ import { OpenCVDetector } from './detect/opencv.js';
 import { LLMDetector } from './detect/llm.js';
 import { detectLanguage } from './langdetect.js';
 import { BatchProcessor } from './batch.js';
+import { inpaint as runInpaint } from './inpaint.js';
+import { extractChromaMask } from './ingest.js';
 
 export class PolyOCR {
   public readonly config: Readonly<PolyOCRConfig>;
@@ -285,8 +287,50 @@ export class PolyOCR {
     timings.translate = nowMs() - tTrans;
     debug(`translate done (${timings.translate.toFixed(0)}ms ${translation ? 'translated' : translationError ?? 'skipped'})`);
 
-    // Stage 7: inpainting — Phase 3 wired here.
-    const inpaintedImage: ImageData | null = null;
+    // Stage 7: inpainting
+    let inpaintedImage: ImageData | null = null;
+    if (options.inpaint && (options.output?.image || options.output?.canvas)) {
+      const tInpaint = nowMs();
+      try {
+        const inpaintRegions = filteredRegions.map((r) => r.bbox);
+        // For each region, the corresponding text to render is the
+        // translation if we have one; otherwise the original recognized
+        // text (so blur and clone modes still receive sensible text input
+        // even though they ignore it).
+        const perRegionText = filteredRegions.map((r) => translation ?? r.text);
+        let masks: undefined | ReturnType<typeof extractChromaMask>;
+        if (options.inpaint === 'chroma') {
+          masks = extractChromaMask(image, options.chromaKey ?? '#FF00FF', options.chromaTolerance ?? 16);
+        }
+        inpaintedImage = await runInpaint({
+          mode: options.inpaint,
+          image,
+          regions: inpaintRegions,
+          texts: perRegionText,
+          masks,
+          font: options.font ?? this.config.font
+        });
+        if (options.output?.canvas && inpaintedImage) {
+          const c = options.output.canvas;
+          if (c.width !== inpaintedImage.width) c.width = inpaintedImage.width;
+          if (c.height !== inpaintedImage.height) c.height = inpaintedImage.height;
+          const cctx = c.getContext('2d');
+          if (cctx) cctx.putImageData(inpaintedImage, 0, 0);
+        }
+        if (!options.output?.image) inpaintedImage = null;
+      } catch (cause) {
+        // Inpainting failures shouldn't take down OCR/translation results.
+        // Log and surface a separate field on the result (we add a
+        // synthetic translationError prefix since ProcessResult doesn't
+        // currently have an `inpaintError` field — Phase 6 polish).
+        if (this.verbose) console.error('[polyocr] inpaint failed:', cause);
+        if (translationError === null) {
+          translationError = `inpaint failed: ${cause instanceof Error ? cause.message : String(cause)}`;
+        }
+      }
+      timings.inpaint = nowMs() - tInpaint;
+      debug(`inpaint done (${timings.inpaint.toFixed(0)}ms mode=${options.inpaint})`);
+    }
 
     const result: ProcessResult = {
       index: options.index ?? 0,
