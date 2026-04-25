@@ -1,0 +1,15 @@
+{
+  "name": "polyocr-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "description": "PolyOCR monorepo — headless OCR/translation/inpainting package and Electron shell",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev:package": "npm run dev --workspace=polyocr",
+    "dev:shell": "npm run dev --workspace=polyocr-shell",
+    "test": "npm run test --workspaces --if-present"
+  }
+}

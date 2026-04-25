@@ -1,0 +1,69 @@
+{
+  "name": "polyocr",
+  "version": "0.1.0",
+  "description": "Multilingual OCR + translation + inpainting + region matching. Headless. Adapter-based.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./adapters": {
+      "types": "./dist/adapters.d.ts",
+      "import": "./dist/adapters.js",
+      "require": "./dist/adapters.cjs"
+    }
+  },
+  "bin": {
+    "polyocr": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "workers",
+    "bridge",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "vite build && tsc --emitDeclarationOnly",
+    "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit",
+    "example:basic": "tsx examples/basic-ocr.ts",
+    "example:translate": "tsx examples/translate.ts",
+    "example:detect": "tsx examples/detect-language.ts"
+  },
+  "dependencies": {
+    "tesseract.js": "^5.1.1",
+    "franc": "^6.2.0",
+    "jszip": "^3.10.1",
+    "better-sqlite3": "^12.0.0"
+  },
+  "optionalDependencies": {
+    "canvas": "^2.11.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0",
+    "vite-plugin-dts": "^4.5.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "ocr",
+    "tesseract",
+    "paddleocr",
+    "translation",
+    "ollama",
+    "inpainting",
+    "manga",
+    "vision-llm"
+  ],
+  "license": "MIT"
+}
