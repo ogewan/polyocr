@@ -38,6 +38,7 @@ import { detectLanguage } from './langdetect.js';
 import { BatchProcessor } from './batch.js';
 import { inpaint as runInpaint } from './inpaint.js';
 import { extractChromaMask } from './ingest.js';
+import { exportResults } from './export/index.js';
 
 export class PolyOCR {
   public readonly config: Readonly<PolyOCRConfig>;
@@ -424,14 +425,91 @@ export class PolyOCR {
     return await this.llmDetector.findSimilar(target, reference);
   }
 
-  // -- Phase 4 entry points -------------------------------------------------
-
-  async export(_results: ProcessResult[], _options: ExportOptions): Promise<Blob | Buffer> {
-    throw new PolyOCRError('EXPORT_FAILED', 'export is implemented in Phase 4');
+  /**
+   * Serialize results to JSON / TXT / CSV / SRT / VTT / ZIP. Returns a
+   * `Buffer` in Node and a `Blob` in browsers/renderers.
+   */
+  async export(results: ProcessResult[], options: ExportOptions): Promise<Blob | Buffer> {
+    return await exportResults(results, options);
   }
 
-  renderToCanvas(_result: ProcessResult, _canvas: HTMLCanvasElement, _options?: RenderOptions): void {
-    throw new PolyOCRError('INVALID_OPTIONS', 'renderToCanvas is implemented in Phase 4');
+  /**
+   * Draw a `ProcessResult` onto a canvas in one of three modes:
+   *   - 'inpainted'   — draws `result.inpaintedImage`. Requires `inpaint`
+   *                    was run with `output.image: true`.
+   *   - 'overlay'     — draws the source image, then renders the translated
+   *                    text at each region's bbox without filling.
+   *   - 'bboxes-only' — draws the source image with colored bbox outlines
+   *                    and labels (debugging).
+   */
+  renderToCanvas(
+    result: ProcessResult,
+    canvas: HTMLCanvasElement | OffscreenCanvas,
+    options: RenderOptions = {}
+  ): void {
+    const mode = options.mode ?? 'inpainted';
+    const ctx = (canvas as HTMLCanvasElement).getContext('2d') as
+      | CanvasRenderingContext2D
+      | OffscreenCanvasRenderingContext2D
+      | null;
+    if (!ctx) throw new PolyOCRError('INVALID_OPTIONS', 'Could not acquire 2D context on the supplied canvas');
+
+    if (mode === 'inpainted') {
+      if (!result.inpaintedImage) {
+        throw new PolyOCRError(
+          'INVALID_OPTIONS',
+          "renderToCanvas mode='inpainted' requires result.inpaintedImage. Re-run process() with options.inpaint and output.image."
+        );
+      }
+      if (canvas.width !== result.inpaintedImage.width) canvas.width = result.inpaintedImage.width;
+      if (canvas.height !== result.inpaintedImage.height) canvas.height = result.inpaintedImage.height;
+      ctx.putImageData(result.inpaintedImage, 0, 0);
+      return;
+    }
+
+    if (!options.source) {
+      throw new PolyOCRError(
+        'INVALID_OPTIONS',
+        `renderToCanvas mode='${mode}' requires options.source (the original ImageData).`
+      );
+    }
+    const src = options.source;
+    if (canvas.width !== src.width) canvas.width = src.width;
+    if (canvas.height !== src.height) canvas.height = src.height;
+    ctx.putImageData(src, 0, 0);
+
+    if (mode === 'overlay') {
+      ctx.save();
+      ctx.fillStyle = '#000';
+      ctx.font = '20px sans-serif';
+      ctx.textBaseline = 'top';
+      const text = result.translation ?? result.text;
+      const lines = text.split(/\r?\n/);
+      for (let i = 0; i < lines.length && i < result.regions.length; i++) {
+        const bbox = result.regions[i].bbox;
+        ctx.fillText(lines[i], bbox.x, bbox.y);
+      }
+      ctx.restore();
+      return;
+    }
+
+    if (mode === 'bboxes-only') {
+      ctx.save();
+      ctx.strokeStyle = options.bboxColor ?? '#FF0000';
+      ctx.lineWidth = options.bboxWidth ?? 2;
+      ctx.font = '14px sans-serif';
+      ctx.fillStyle = options.bboxColor ?? '#FF0000';
+      ctx.textBaseline = 'bottom';
+      for (const r of result.regions) {
+        ctx.strokeRect(r.bbox.x, r.bbox.y, r.bbox.w, r.bbox.h);
+        ctx.fillText(`${(r.confidence * 100).toFixed(0)}%`, r.bbox.x, r.bbox.y);
+      }
+      ctx.restore();
+      return;
+    }
+
+    const _exhaustive: never = mode;
+    throw new PolyOCRError('INVALID_OPTIONS', `Unknown render mode: ${String(_exhaustive)}`);
   }
 
   async dispose(): Promise<void> {
