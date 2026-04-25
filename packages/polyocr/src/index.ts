@@ -36,6 +36,9 @@ export type {
 // Convenience re-exports for the common adapters.
 export { TesseractAdapter } from './ocr/tesseract.js';
 export { OllamaTranslationAdapter } from './translate/ollama.js';
+export { OpenCVDetector } from './detect/opencv.js';
+export { LLMDetector } from './detect/llm.js';
 export { MemoryCache, hashImageData } from './cache.js';
 export { detectLanguage, detectFromImage } from './langdetect.js';
 export { normalize, extractChromaMask } from './ingest.js';
+export { BatchProcessor } from './batch.js';

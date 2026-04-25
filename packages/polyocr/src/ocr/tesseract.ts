@@ -79,8 +79,17 @@ export class TesseractAdapter implements OcrAdapter {
   }
 
   async recognize(image: ImageData, options: OcrOptions): Promise<OcrResult> {
+    const debug = (msg: string) => {
+      if (process.env.POLYOCR_VERBOSE === '1') {
+        console.error(`[polyocr/tesseract] ${msg}`);
+      }
+    };
+    const tag = `idx=${options.index ?? 0} ${image.width}x${image.height}`;
+    debug(`${tag}: recognize() start`);
     const scheduler = await this.getScheduler();
+    debug(`${tag}: scheduler ready`);
     const input = await imageDataToTesseractInput(image);
+    debug(`${tag}: input encoded (${Buffer.isBuffer(input) ? `Buffer len=${input.length}` : 'ImageData'})`);
     // PSM and OEM are scheduler-wide parameters in Tesseract.js v5 — set via
     // the worker's `setParameters` rather than the per-job options. We leave
     // them at the engine defaults here; consumers who want a non-default PSM
@@ -88,7 +97,9 @@ export class TesseractAdapter implements OcrAdapter {
     // the scheduler bootstrap. (Per-job overrides require a scheduler API
     // upstream Tesseract.js does not currently expose.)
     void options;
+    debug(`${tag}: addJob('recognize')`);
     const { data } = await scheduler.addJob('recognize', input);
+    debug(`${tag}: recognize() done (${data?.lines?.length ?? 0} lines)`);
     return mapTesseractResult(data);
   }
 
@@ -104,21 +115,32 @@ export class TesseractAdapter implements OcrAdapter {
     if (sharedScheduler) return sharedScheduler;
     if (schedulerPromise) return schedulerPromise;
     schedulerPromise = (async () => {
+      const debug = (msg: string) => {
+        if (process.env.POLYOCR_VERBOSE === '1') {
+          console.error(`[polyocr/tesseract] ${msg}`);
+        }
+      };
+      debug(`scheduler init: importing tesseract.js`);
       const tesseract = await import('tesseract.js');
+      debug(`scheduler init: creating scheduler with ${this.workerCount} workers`);
       const scheduler = tesseract.createScheduler();
-      // Spawn `workerCount` workers, each loading the requested languages.
-      // This is parallelizable across workers — the model files are downloaded
-      // once and cached at the OS / browser cache layer.
       const langArg = this.languages.join('+');
       const workerOpts: any = {};
       if (this.logger) workerOpts.logger = this.logger;
-      const workers = await Promise.all(
-        Array.from({ length: this.workerCount }, async () => {
-          const w = await tesseract.createWorker(langArg, 1, workerOpts);
-          return w;
-        })
-      );
-      for (const w of workers) scheduler.addWorker(w);
+      // We serialize worker creation rather than running them in parallel.
+      // Parallel `createWorker(...)` calls can deadlock when both workers race
+      // to download / load the same `*.traineddata` file — observed
+      // empirically as a hang during scheduler init in `worker_threads`.
+      // Sequential init costs an extra second on cold start (the model is
+      // loaded once into one worker, then again into the second) but is
+      // reliable.
+      for (let i = 0; i < this.workerCount; i++) {
+        debug(`scheduler init: createWorker(${langArg}) ${i + 1}/${this.workerCount}`);
+        const w = await tesseract.createWorker(langArg, 1, workerOpts);
+        debug(`scheduler init: worker ${i + 1} ready, adding to scheduler`);
+        scheduler.addWorker(w);
+      }
+      debug(`scheduler init: complete (${this.workerCount} workers)`);
       sharedScheduler = scheduler;
       return scheduler;
     })();

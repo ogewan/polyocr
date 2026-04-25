@@ -18,6 +18,7 @@ const externals = [
   'jszip',
   'better-sqlite3',
   '@napi-rs/canvas',
+  '@techstark/opencv-js',
   'node:fs',
   'node:path',
   'node:crypto',
