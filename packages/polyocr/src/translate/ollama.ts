@@ -18,46 +18,111 @@
 
 import type { OcrOptions, TranslationAdapter } from '../types.js';
 import { PolyOCRError } from '../types.js';
+import type { ModelProfile } from './profiles.js';
+import { resolveProfile } from './profiles.js';
 
 interface OllamaTranslationConfig {
   ollamaUrl?: string;
   /** Model name. Default `'aya:8b'`. */
   model?: string;
+  /**
+   * Custom `ModelProfile`s to merge in front of the built-in registry. Lets
+   * users register private fine-tunes (`mycorp/aya-jp:8b`) so `polyocr setup`
+   * and `supportedLanguages()` know what they speak and how big they are.
+   */
+  customProfiles?: ModelProfile[];
 }
 
 /**
- * The 23 languages Aya 8B is officially trained for. Source: Cohere's Aya
- * model card. ISO 639-1 codes.
+ * Granular status returned by `probe()`. The setup module needs to
+ * distinguish "daemon down" from "model missing" — a single boolean
+ * collapses them and makes it impossible to choose between "install the
+ * daemon" and "pull the model".
  */
-const AYA_LANGUAGES = [
-  'ar', 'zh', 'cs', 'nl', 'en', 'fr', 'de', 'el',
-  'he', 'hi', 'id', 'it', 'ja', 'ko', 'fa', 'pl',
-  'pt', 'ro', 'ru', 'es', 'tr', 'uk', 'vi'
-];
+export type OllamaProbeStatus =
+  | 'ready'           // daemon up, configured model present
+  | 'daemon-down'     // /api/tags unreachable (ECONNREFUSED, fetch threw)
+  | 'daemon-error'    // /api/tags returned non-2xx
+  | 'model-missing';  // daemon up, configured model not in list
+
+/**
+ * Structured result of an Ollama probe. Used by `polyocr setup` to decide
+ * which remediation step to offer (install daemon, start daemon, pull
+ * model, or nothing — already ready).
+ */
+export interface OllamaProbeResult {
+  status: OllamaProbeStatus;
+  ollamaUrl: string;
+  configuredModel: string;
+  /** Model tags present on the daemon. Empty when daemon is down/erroring. */
+  installedModels: string[];
+  /** Raw error text when daemon is down or returned an error response. */
+  error?: string;
+}
 
 export class OllamaTranslationAdapter implements TranslationAdapter {
   public readonly name = 'ollama';
   private readonly ollamaUrl: string;
   private readonly model: string;
+  private readonly customProfiles?: ModelProfile[];
 
   constructor(config: OllamaTranslationConfig = {}) {
     this.ollamaUrl = config.ollamaUrl ?? 'http://localhost:11434';
     this.model = config.model ?? 'aya:8b';
+    this.customProfiles = config.customProfiles;
+  }
+
+  /**
+   * Granular health probe. Distinguishes daemon-down, daemon-error,
+   * model-missing, and ready. `polyocr setup` consumes this; everyday
+   * pipeline code just calls `isAvailable()`.
+   *
+   * The family-prefix match (`aya:35b` matches a `model: 'aya:8b'` config)
+   * is preserved here from the old `isAvailable()` — see the comment below
+   * for why.
+   */
+  async probe(): Promise<OllamaProbeResult> {
+    let res: Response;
+    try {
+      res = await fetch(`${this.ollamaUrl}/api/tags`);
+    } catch (cause) {
+      return {
+        status: 'daemon-down',
+        ollamaUrl: this.ollamaUrl,
+        configuredModel: this.model,
+        installedModels: [],
+        error: cause instanceof Error ? cause.message : String(cause)
+      };
+    }
+    if (!res.ok) {
+      return {
+        status: 'daemon-error',
+        ollamaUrl: this.ollamaUrl,
+        configuredModel: this.model,
+        installedModels: [],
+        error: `${res.status} ${res.statusText}`
+      };
+    }
+    const json = (await res.json().catch(() => ({}))) as { models?: Array<{ name: string }> };
+    const installedModels = (json.models ?? []).map((m) => m.name);
+    // Match either exact name (`aya:8b`) or the family prefix (`aya:`) so a
+    // user with `aya:35b` pulled also passes the probe. Without this, a user
+    // who already has a *different* tag from the same family would be told
+    // their model is missing.
+    const family = this.model.split(':')[0];
+    const present = installedModels.some(
+      (n) => n === this.model || n.startsWith(family + ':')
+    );
+    return {
+      status: present ? 'ready' : 'model-missing',
+      ollamaUrl: this.ollamaUrl,
+      configuredModel: this.model,
+      installedModels
+    };
   }
 
   async isAvailable(): Promise<boolean> {
-    try {
-      const res = await fetch(`${this.ollamaUrl}/api/tags`);
-      if (!res.ok) return false;
-      const json = (await res.json()) as { models?: Array<{ name: string }> };
-      const models = json.models ?? [];
-      // Match either exact name (`aya:8b`) or the family prefix (`aya`) so a
-      // user with `aya:35b` pulled also passes the probe.
-      const family = this.model.split(':')[0];
-      return models.some((m) => m.name === this.model || m.name.startsWith(family + ':'));
-    } catch {
-      return false;
-    }
+    return (await this.probe()).status === 'ready';
   }
 
   async translate(
@@ -98,8 +163,24 @@ export class OllamaTranslationAdapter implements TranslationAdapter {
     return parseTranslation(json.response ?? '');
   }
 
-  supportedLanguages(): string[] {
-    return [...AYA_LANGUAGES];
+  /**
+   * Returns the language list of the configured model's profile, or `null`
+   * when no profile matches (custom or unknown model). `null` signals "any
+   * target accepted, but we can't validate it" — the model will still
+   * attempt the translation.
+   */
+  supportedLanguages(): string[] | null {
+    const profile = this.getProfile();
+    return profile ? [...profile.languages] : null;
+  }
+
+  /**
+   * The `ModelProfile` matching the configured model, or `null` if no
+   * profile matches. Used by `polyocr setup` to render confirmation
+   * prompts ("Pull qwen2.5:3b (~1.9 GB)?") and language-list summaries.
+   */
+  getProfile(): ModelProfile | null {
+    return resolveProfile(this.model, this.customProfiles);
   }
 }
 

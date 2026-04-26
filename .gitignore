@@ -18,6 +18,7 @@ release/
 .env
 .env.*
 !.env.example
+.claude/
 
 # Python (PaddleOCR bridge)
 __pycache__/
@@ -54,3 +55,6 @@ logs/
 
 # Misc
 samples/
+sample-output/
+ARCHITECTURE.md
+NEXT_PHASES_PROMPT.md

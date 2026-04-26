@@ -80,6 +80,14 @@ export interface PolyOCRConfig {
   translationAdapter?: TranslationAdapter;
 
   /**
+   * Custom translation `ModelProfile`s, merged in front of the built-in
+   * registry. Lets a consumer register private fine-tunes so `polyocr setup`
+   * and `TranslationAdapter.supportedLanguages()` know about them. Has no
+   * effect when `translationAdapter` is overridden by a non-Ollama adapter.
+   */
+  translationProfiles?: import('./translate/profiles.js').ModelProfile[];
+
+  /**
    * Where to cache OCR results. Defaults to an in-memory `Map`. Pass `false` to
    * disable caching. Pass a `SqliteCache` instance (Electron shell) for persistent
    * caching across runs.
@@ -279,8 +287,14 @@ export interface TranslationAdapter {
    * it themselves or rely on the LLM to do so.
    */
   translate(text: string, from: string, to: string, domain?: OcrOptions['translationDomain']): Promise<string>;
-  /** ISO 639-1 codes the adapter supports as a target language. */
-  supportedLanguages(): string[];
+  /**
+   * ISO 639-1 codes the adapter supports as a target language. Returns `null`
+   * when the adapter cannot determine its supported set — for example, an
+   * Ollama adapter configured with a custom model that has no registered
+   * profile. UI consumers should treat `null` as "any target language is
+   * accepted, but quality is unknown".
+   */
+  supportedLanguages(): string[] | null;
   isAvailable(): Promise<boolean>;
 }
 

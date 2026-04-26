@@ -20,6 +20,7 @@ const externals = [
   '@napi-rs/canvas',
   '@techstark/opencv-js',
   'node:fs',
+  'node:fs/promises',
   'node:path',
   'node:crypto',
   'node:worker_threads',
@@ -27,14 +28,17 @@ const externals = [
   'node:net',
   'node:os',
   'node:url',
+  'node:readline',
   'fs',
+  'fs/promises',
   'path',
   'crypto',
   'worker_threads',
   'child_process',
   'net',
   'os',
-  'url'
+  'url',
+  'readline'
 ];
 
 export default defineConfig({
@@ -45,7 +49,8 @@ export default defineConfig({
       entry: {
         index: resolve(__dirname, 'src/index.ts'),
         cli: resolve(__dirname, 'src/cli.ts'),
-        adapters: resolve(__dirname, 'src/adapters.ts')
+        adapters: resolve(__dirname, 'src/adapters.ts'),
+        setup: resolve(__dirname, 'src/setup/index.ts')
       },
       formats: ['es', 'cjs'],
       fileName: (format, name) => `${name}.${format === 'es' ? 'js' : 'cjs'}`

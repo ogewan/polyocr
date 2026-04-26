@@ -16,6 +16,11 @@
       "types": "./dist/adapters.d.ts",
       "import": "./dist/adapters.js",
       "require": "./dist/adapters.cjs"
+    },
+    "./setup": {
+      "types": "./dist/setup.d.ts",
+      "import": "./dist/setup.js",
+      "require": "./dist/setup.cjs"
     }
   },
   "bin": {

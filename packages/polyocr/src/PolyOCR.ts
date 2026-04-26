@@ -55,14 +55,40 @@ export class PolyOCR {
 
   /**
    * Resolved availability of optional adapters. Populated by `ready()`
-   * (called lazily on first `process()` call).
+   * (called lazily on first `process()` call). Exposed publicly via the
+   * `availability` getter so the CLI / Electron shell can render actionable
+   * hints ("translation requested but Ollama is unreachable — run `polyocr
+   * setup`") without re-probing.
    */
-  private availability: {
+  private _availability: {
     ocr: boolean;
     translator: boolean;
     opencv: boolean;
     llm: boolean;
   } | null = null;
+
+  /**
+   * Public read-only view of `_availability`. Returns `null` until
+   * `ready()` resolves.
+   */
+  get availability(): Readonly<{
+    ocr: boolean;
+    translator: boolean;
+    opencv: boolean;
+    llm: boolean;
+  }> | null {
+    return this._availability;
+  }
+
+  /**
+   * The configured translation adapter. Exposed read-only so consumers
+   * (`polyocr setup`, the Electron shell) can call `adapter.supportedLanguages()`
+   * or — for `OllamaTranslationAdapter` — `adapter.probe()` and
+   * `adapter.getProfile()` without instantiating a parallel adapter.
+   */
+  get translationAdapter(): TranslationAdapter {
+    return this.translator;
+  }
 
   private readyPromise: Promise<void> | null = null;
 
@@ -79,12 +105,17 @@ export class PolyOCR {
         workerCount: this.defaultConcurrency
       });
 
-    // Translation adapter — defaults to Ollama.
+    // Translation adapter — defaults to Ollama. Custom `translationProfiles`
+    // are forwarded so `OllamaTranslationAdapter.supportedLanguages()` and
+    // `getProfile()` can resolve user-registered models. They are ignored
+    // when the user overrides the adapter entirely (different adapters have
+    // their own concept of model coverage).
     this.translator =
       config.translationAdapter ??
       new OllamaTranslationAdapter({
         ollamaUrl: config.ollamaUrl,
-        model: config.translationModel
+        model: config.translationModel,
+        ...(config.translationProfiles && { customProfiles: config.translationProfiles })
       });
 
     // Region detectors — we always instantiate both. The user picks via
@@ -119,7 +150,7 @@ export class PolyOCR {
    * Probe all adapters' availability and cache the result.
    */
   async ready(): Promise<void> {
-    if (this.availability) return;
+    if (this._availability) return;
     if (this.readyPromise) return this.readyPromise;
     // Each adapter probe is wrapped in a hard timeout so a misbehaving
     // adapter (e.g. a network probe with no socket timeout, or a WASM init
@@ -159,7 +190,7 @@ export class PolyOCR {
       const translator = await probe('translator', () => this.translator.isAvailable());
       const opencv = await probe('opencv', () => this.opencvDetector.isAvailable(), 12000);
       const llm = await probe('llm', () => this.llmDetector.isAvailable());
-      this.availability = { ocr, translator, opencv, llm };
+      this._availability = { ocr, translator, opencv, llm };
       if (!ocr) {
         console.warn(`[polyocr] OCR adapter "${this.ocr.name}" failed isAvailable()`);
       }
@@ -203,11 +234,11 @@ export class PolyOCR {
     // any explicitly-supplied `regions` so a caller who already knows part
     // of the layout can combine it with auto-detection.
     let resolvedRegions = options.regions;
-    if (options.autoDetect && this.availability?.opencv) {
+    if (options.autoDetect && this._availability?.opencv) {
       const detected = await this.opencvDetector.detect(image).catch(() => []);
       resolvedRegions = mergeRegions(resolvedRegions, detected);
     }
-    if (options.detectWithLLM && this.availability?.llm) {
+    if (options.detectWithLLM && this._availability?.llm) {
       const detected = await this.llmDetector.detect(image).catch(() => []);
       resolvedRegions = mergeRegions(resolvedRegions, detected);
     }
@@ -250,7 +281,7 @@ export class PolyOCR {
     const lang = await detectLanguage(filteredText, {
       ollamaUrl: this.config.ollamaUrl,
       model: this.config.translationModel,
-      noLlmFallback: !this.availability?.translator
+      noLlmFallback: !this._availability?.translator
     });
     timings.langdetect = nowMs() - tLang;
     debug(`langdetect done (${timings.langdetect.toFixed(0)}ms lang=${lang.language ?? 'null'})`);
@@ -261,7 +292,7 @@ export class PolyOCR {
     let translationError: string | null = null;
     const wantTranslation = options.translate && options.translate !== lang.language;
     if (wantTranslation) {
-      if (!this.availability?.translator) {
+      if (!this._availability?.translator) {
         translationError = `translation adapter "${this.translator.name}" unavailable`;
       } else if (lang.language === null) {
         translationError = 'source language could not be determined (numerals-only or empty text)';
@@ -389,7 +420,7 @@ export class PolyOCR {
    */
   async buildReference(crop: PolyOCRInput, label: string): Promise<RegionReference> {
     await this.ready();
-    if (!this.availability?.llm) {
+    if (!this._availability?.llm) {
       throw new PolyOCRError(
         'DETECT_UNAVAILABLE',
         'buildReference requires the LLM region detector. Ensure Ollama is running with a vision model (e.g. `ollama pull llama3.2-vision`).'
@@ -415,7 +446,7 @@ export class PolyOCR {
    */
   async findRegion(image: PolyOCRInput, reference: RegionReference): Promise<BoundingBox | null> {
     await this.ready();
-    if (!this.availability?.llm) {
+    if (!this._availability?.llm) {
       throw new PolyOCRError(
         'DETECT_UNAVAILABLE',
         'findRegion requires the LLM region detector. Ensure Ollama is running with a vision model.'

@@ -37,6 +37,7 @@ export type {
 export { TesseractAdapter } from './ocr/tesseract.js';
 export { PaddleOCRAdapter } from './ocr/paddleocr.js';
 export { OllamaTranslationAdapter } from './translate/ollama.js';
+export type { OllamaProbeResult, OllamaProbeStatus } from './translate/ollama.js';
 export { OpenCVDetector } from './detect/opencv.js';
 export { LLMDetector } from './detect/llm.js';
 export { MemoryCache, hashImageData } from './cache.js';
@@ -44,3 +45,13 @@ export { detectLanguage, detectFromImage } from './langdetect.js';
 export { normalize, extractChromaMask } from './ingest.js';
 export { BatchProcessor } from './batch.js';
 export { inpaint } from './inpaint.js';
+
+// Translation model profiles (per-model language lists + setup metadata).
+// Re-exported here as a convenience; the full setup module is also
+// available at the `polyocr/setup` subpath export.
+export {
+  BUILT_IN_PROFILES,
+  resolveProfile,
+  listProfiles
+} from './translate/profiles.js';
+export type { ModelProfile, ModelStrength } from './translate/profiles.js';
