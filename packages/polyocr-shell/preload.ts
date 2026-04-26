@@ -96,7 +96,8 @@ const polyocrBridge: PolyOCRBridge = {
       });
   },
 
-  listProfiles: () => ipcRenderer.invoke('polyocr:list-profiles')
+  listProfiles: () => ipcRenderer.invoke('polyocr:list-profiles'),
+  getProfiles: () => ipcRenderer.invoke('polyocr:get-profiles')
 };
 
 const shellBridge: ShellBridge = {

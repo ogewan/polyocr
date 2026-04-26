@@ -55,7 +55,7 @@ import type {
   BoundingBox,
   ProcessTimings
 } from 'polyocr';
-import { runSetup, formatProfileList } from 'polyocr/setup';
+import { runSetup, formatProfileList, listProfiles } from 'polyocr/setup';
 import type { SetupOptions, PullProgress } from 'polyocr/setup';
 import { ShellDb } from './db.js';
 import { serializeResult } from './serialize.js';
@@ -270,6 +270,27 @@ function registerPipelineHandlers(): void {
   );
 
   ipcMain.handle('polyocr:list-profiles', () => formatProfileList());
+
+  // Structured-data variant for the Settings page model picker. Reads
+  // the same registry as `polyocr:list-profiles` but returns the
+  // ModelProfile[] directly. Custom profiles are loaded from the
+  // current settings' configured path so the dropdown reflects what
+  // the user has actually registered.
+  ipcMain.handle('polyocr:get-profiles', async () => {
+    const settings = db?.getSettings();
+    let custom: ModelProfile[] | undefined;
+    if (settings?.customTranslationProfilesPath) {
+      try {
+        const raw = await readFile(settings.customTranslationProfilesPath, 'utf8');
+        const parsed = JSON.parse(raw) as ModelProfile[];
+        if (Array.isArray(parsed)) custom = parsed;
+      } catch {
+        // Same fail-soft policy as buildPolyOCR — bad file just falls
+        // back to built-ins, no exception.
+      }
+    }
+    return listProfiles(custom);
+  });
 }
 
 // ── IPC: shell utilities ────────────────────────────────────────────────

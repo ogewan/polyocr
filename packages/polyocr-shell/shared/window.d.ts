@@ -87,6 +87,8 @@ export interface PolyOCRBridge {
 
   /** Plain-text dump of the built-in + custom translation profile registry. */
   listProfiles(): Promise<string>;
+  /** Structured array of profiles for UI consumption (e.g. a model dropdown). */
+  getProfiles(): Promise<ModelProfile[]>;
 }
 
 /**
