@@ -1,0 +1,41 @@
+/*
+ * Tailwind entry. The three @tailwind directives expand into the full
+ * base / components / utilities layers. Anything we add below the
+ * directives ships in the bundle as raw CSS.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom drag region for the (eventual) frameless title bar.
+ * `-webkit-app-region: drag` is Electron-only — turns the element into
+ * a draggable area for moving the window. Buttons inside need
+ * `-webkit-app-region: no-drag` so clicks hit them instead of dragging
+ * the window. */
+@layer components {
+  .titlebar-drag {
+    -webkit-app-region: drag;
+  }
+  .titlebar-no-drag {
+    -webkit-app-region: no-drag;
+  }
+}
+
+/* Minor scrollbar polish on Chromium so long results lists don't look
+ * out of place against Tailwind's slate palette. */
+@layer base {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: theme('colors.slate.100');
+  }
+  ::-webkit-scrollbar-thumb {
+    background: theme('colors.slate.300');
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: theme('colors.slate.400');
+  }
+}

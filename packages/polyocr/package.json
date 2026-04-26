@@ -5,20 +5,20 @@
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./dist/src/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/src/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
     "./adapters": {
-      "types": "./dist/adapters.d.ts",
+      "types": "./dist/src/adapters.d.ts",
       "import": "./dist/adapters.js",
       "require": "./dist/adapters.cjs"
     },
     "./setup": {
-      "types": "./dist/setup.d.ts",
+      "types": "./dist/src/setup/index.d.ts",
       "import": "./dist/setup.js",
       "require": "./dist/setup.cjs"
     }

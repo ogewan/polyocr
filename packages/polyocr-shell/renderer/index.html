@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Strict CSP for the renderer. We don't need:
+        - script-src: anything beyond 'self' (no CDN, no inline)
+        - connect-src: anything beyond 'self' (all network goes via main IPC)
+        - img-src: data + blob (drag-dropped files arrive as data URLs / blobs)
+      'unsafe-inline' is needed for style-src because Tailwind injects
+      runtime style elements; we accept that trade-off.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"
+    />
+    <title>PolyOCR</title>
+  </head>
+  <body class="bg-slate-50 text-slate-900 antialiased">
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

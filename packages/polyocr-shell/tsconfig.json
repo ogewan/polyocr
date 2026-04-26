@@ -17,5 +17,12 @@
     "sourceMap": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["renderer/**/*", "main.ts", "preload.ts"]
+  "include": [
+    "renderer/**/*",
+    "main.ts",
+    "preload.ts",
+    "db.ts",
+    "serialize.ts",
+    "shared/**/*"
+  ]
 }
