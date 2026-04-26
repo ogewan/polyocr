@@ -2,8 +2,8 @@
   "//": "Main-process tsconfig. Compiles main.ts, preload.ts, and the shared modules they import to CommonJS so Electron can `require` them and so native deps like better-sqlite3 work cleanly. The renderer is built by Vite, NOT by tsc — it has its own settings in tsconfig.json (which the editor uses for navigation across both halves).",
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "Node16",
+    "moduleResolution": "Node16",
     "lib": ["ES2022", "DOM"],
     "strict": true,
     "noImplicitOverride": true,
