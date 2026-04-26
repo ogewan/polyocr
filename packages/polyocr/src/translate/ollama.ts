@@ -31,6 +31,16 @@ interface OllamaTranslationConfig {
    * and `supportedLanguages()` know what they speak and how big they are.
    */
   customProfiles?: ModelProfile[];
+  /**
+   * Per-call translation timeout in milliseconds. Default 60000 (60s). When
+   * the model is asked to translate noisy / very long input it can grind for
+   * 5+ minutes — Node's fetch has no default timeout and the failure looks
+   * like a hang. Surfacing it as `TRANSLATE_FAILED: timed out after Nms`
+   * lets batch runs fail-fast on a single bad image instead of stalling the
+   * whole queue. Set higher for clean, very long inputs; lower for "fail
+   * fast" CI-style runs.
+   */
+  translateTimeoutMs?: number;
 }
 
 /**
@@ -65,11 +75,13 @@ export class OllamaTranslationAdapter implements TranslationAdapter {
   private readonly ollamaUrl: string;
   private readonly model: string;
   private readonly customProfiles?: ModelProfile[];
+  private readonly translateTimeoutMs: number;
 
   constructor(config: OllamaTranslationConfig = {}) {
     this.ollamaUrl = config.ollamaUrl ?? 'http://localhost:11434';
     this.model = config.model ?? 'aya:8b';
     this.customProfiles = config.customProfiles;
+    this.translateTimeoutMs = config.translateTimeoutMs ?? 60_000;
   }
 
   /**
@@ -146,15 +158,34 @@ export class OllamaTranslationAdapter implements TranslationAdapter {
         temperature: 0.2
       }
     };
+    // AbortController-driven timeout: Node's `fetch` has no default request
+    // timeout, so a slow-translating model (aya:8b on noisy/long input has
+    // been observed at >5 minutes) hangs the entire call until the OS
+    // socket eventually gives up. The controller fires `abort()` after
+    // `translateTimeoutMs` and the error is surfaced as
+    // `TRANSLATE_FAILED: timed out after Nms` rather than a generic
+    // network failure.
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), this.translateTimeoutMs);
     let res: Response;
     try {
       res = await fetch(`${this.ollamaUrl}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
+        signal: ac.signal
       });
     } catch (cause) {
-      throw new PolyOCRError('TRANSLATE_FAILED', 'Failed to reach Ollama', cause);
+      const aborted = ac.signal.aborted;
+      throw new PolyOCRError(
+        'TRANSLATE_FAILED',
+        aborted
+          ? `timed out after ${this.translateTimeoutMs}ms`
+          : 'Failed to reach Ollama',
+        cause
+      );
+    } finally {
+      clearTimeout(timer);
     }
     if (!res.ok) {
       throw new PolyOCRError('TRANSLATE_FAILED', `Ollama responded ${res.status}`);
