@@ -339,7 +339,7 @@ export function formatProfileList(custom?: ModelProfile[]): string {
 
 // Re-export the lower-level pieces so consumers (Electron shell, tests)
 // can compose their own UX without going through `runSetup`.
-export { detectOllamaBinary, installOllama, startDaemon } from './install.js';
+export { detectOllamaBinary, installOllama, startDaemon, runStreamed } from './install.js';
 export type { BinaryInfo, InstallResult, InstallMethod, StartDaemonResult } from './install.js';
 export { probeOllama, isLocalOllamaUrl } from './probe.js';
 export { pullModel } from './pull.js';
@@ -348,3 +348,13 @@ export { confirm, ask } from './prompt.js';
 export type { OllamaProbeResult, OllamaProbeStatus } from '../translate/ollama.js';
 export type { ModelProfile, ModelStrength } from '../translate/profiles.js';
 export { BUILT_IN_PROFILES, listProfiles, resolveProfile } from '../translate/profiles.js';
+
+// Paddle setup (sibling orchestrator for PaddleOCR's Python deps).
+export { runPaddleSetup, probePaddle } from './paddle.js';
+export type {
+  PaddleSetupOptions,
+  PaddleSetupResult,
+  PaddleSetupStatus,
+  PaddleProbeResult,
+  PaddleProbeStatus
+} from './paddle.js';

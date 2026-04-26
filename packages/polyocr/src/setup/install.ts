@@ -351,9 +351,12 @@ function spawnDetached(opts: StartOptions): Promise<StartDaemonResult> {
 /**
  * Spawn `cmd args`, stream stdout+stderr to `log`, and resolve with the
  * exit code. SIGINT propagation: when `signal.aborted` fires we send
- * SIGTERM to the child so winget / brew / sh quit cleanly.
+ * SIGTERM to the child so winget / brew / sh / pip quit cleanly.
+ *
+ * Exported so the paddle setup orchestrator (`setup/paddle.ts`) can
+ * reuse the same streaming + cancellation pattern for `pip install`.
  */
-function runStreamed(
+export function runStreamed(
   cmd: string,
   args: string[],
   log: (s: string) => void,
