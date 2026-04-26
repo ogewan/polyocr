@@ -28,6 +28,20 @@ export interface Settings {
   visionModel: string;
   /** Whether to register PaddleOCRAdapter (requires Python + paddleocr). */
   enablePaddleOCR: boolean;
+  /**
+   * PaddleOCR language code passed as `lang` to the adapter. PaddleOCR's
+   * own vocabulary (e.g. `'en'`, `'ch'`, `'japan'`, `'korean'`) — NOT
+   * shared with `tesseractLanguages` because the encodings and
+   * cardinality differ (Tesseract is multi-lang strings like
+   * `'eng,jpn'`, PaddleOCR is one ISO-ish code per call). Default `'en'`.
+   */
+  paddleocrLang: string;
+  /**
+   * Override the Python binary used to spawn the PaddleOCR bridge.
+   * `null` = auto-discover (`python3` on POSIX, `python` on Windows).
+   * Set when the user has paddleocr installed in a specific venv.
+   */
+  paddleocrPythonPath: string | null;
   /** Tesseract language packs. Default: `['eng']`. */
   tesseractLanguages: string[];
   /** Default target language for new sessions. `null` skips translation. */
@@ -54,6 +68,8 @@ export const DEFAULT_SETTINGS: Settings = {
   translationModel: 'aya:8b',
   visionModel: 'llama3.2-vision',
   enablePaddleOCR: false,
+  paddleocrLang: 'en',
+  paddleocrPythonPath: null,
   tesseractLanguages: ['eng'],
   defaultTargetLanguage: null,
   defaultInpaintMode: null,

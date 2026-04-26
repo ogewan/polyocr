@@ -132,6 +132,56 @@ export function Settings({ settings, onSaved }: SettingsPageProps): JSX.Element 
             />
             <span className="text-slate-600">Enable</span>
           </label>
+          {/* Sub-fields collapse when paddle is disabled — keeps the page
+              tidy and signals that these settings are paddle-scoped. */}
+          {draft.enablePaddleOCR && (
+            <div className="mt-2 pl-6 space-y-2 border-l-2 border-slate-200">
+              <div className="space-y-1">
+                <label className="block text-xs text-slate-600">
+                  PaddleOCR language
+                </label>
+                <input
+                  type="text"
+                  value={draft.paddleocrLang}
+                  onChange={(e) => setDraft({ ...draft, paddleocrLang: e.target.value })}
+                  placeholder="en, ch, japan, korean, …"
+                  className="w-full border border-slate-300 rounded px-2 py-1 font-mono"
+                />
+                <p className="text-[11px] text-slate-500">
+                  PaddleOCR's own vocabulary (different from Tesseract's). See
+                  the PaddleOCR docs for the full list.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs text-slate-600">Python binary</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={draft.paddleocrPythonPath ?? ''}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        paddleocrPythonPath: e.target.value || null
+                      })
+                    }
+                    placeholder="auto-discover (python3 / python on PATH)"
+                    className="flex-1 border border-slate-300 rounded px-2 py-1 font-mono"
+                  />
+                  <button
+                    onClick={async () => {
+                      const picked = await window.shell.openFilePicker();
+                      if (picked && picked[0]) {
+                        setDraft({ ...draft, paddleocrPythonPath: picked[0] });
+                      }
+                    }}
+                    className="px-2 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                  >
+                    Browse…
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </Field>
 
         <Field label="Custom translation profiles">

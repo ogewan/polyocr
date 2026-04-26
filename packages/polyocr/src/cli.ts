@@ -37,10 +37,18 @@ import { writeFile, readFile } from 'node:fs/promises';
 import { readdirSync, statSync } from 'node:fs';
 import { join, extname, isAbsolute, resolve } from 'node:path';
 import { PolyOCR } from './index.js';
+import { PaddleOCRAdapter } from './ocr/paddleocr.js';
 import { exportResults } from './export/index.js';
-import { runSetup, formatProfileList } from './setup/index.js';
+import { runSetup, runPaddleSetup, formatProfileList } from './setup/index.js';
 import type { ModelProfile } from './setup/index.js';
-import type { ExportOptions, OcrOptions, BatchOptions, BoundingBox, ProcessResult } from './types.js';
+import type {
+  ExportOptions,
+  OcrAdapter,
+  OcrOptions,
+  BatchOptions,
+  BoundingBox,
+  ProcessResult
+} from './types.js';
 
 interface ParsedArgs {
   command: 'process' | 'batch' | 'detect' | 'setup';
@@ -130,6 +138,20 @@ async function main(): Promise<void> {
       process.stdout.write(formatProfileList(customProfiles));
       process.exit(0);
     }
+    // --paddle dispatches to the sibling orchestrator. Ollama-specific
+    // flags (--model, --ollama, --list-models, --model-profile) are
+    // silently no-ops in this branch — paddle has no model registry.
+    if (flags.paddle === true) {
+      const result = await runPaddleSetup({
+        ...(flagStr(flags, 'python') !== undefined && { pythonPath: flagStr(flags, 'python') }),
+        yes: flags.yes === true,
+        checkOnly: flags.check === true,
+        log: (s) => process.stderr.write(s.endsWith('\n') ? s : s + '\n'),
+        signal: ac.signal
+      });
+      process.stderr.write(`\n${result.message}\n`);
+      process.exit(result.exitCode);
+    }
     const result = await runSetup({
       ollamaUrl: ollamaUrl ?? 'http://localhost:11434',
       model: translationModel ?? 'aya:8b',
@@ -155,12 +177,29 @@ async function main(): Promise<void> {
   const fps = flags.fps ? Number(flagStr(flags, 'fps')) : undefined;
   const concurrency = Number(flagStr(flags, 'concurrency') ?? workers);
 
+  // --ocr <tesseract|paddle> selects the adapter. `paddle` constructs a
+  // PaddleOCRAdapter with --paddle-lang (default 'en') and --python
+  // (default: PATH discovery via the adapter's defaultPython()). Any
+  // other value (including the default 'tesseract') leaves ocrAdapter
+  // undefined, which makes PolyOCR fall back to its built-in
+  // TesseractAdapter.
+  const ocrChoice = flagStr(flags, 'ocr');
+  const pythonOverride = flagStr(flags, 'python');
+  const ocrAdapter: OcrAdapter | undefined =
+    ocrChoice === 'paddle'
+      ? new PaddleOCRAdapter({
+          lang: flagStr(flags, 'paddle-lang') ?? 'en',
+          ...(pythonOverride !== undefined && { pythonPath: pythonOverride })
+        })
+      : undefined;
+
   const pocr = new PolyOCR({
     tesseractLanguages: langs,
     workerCount: workers,
     ...(ollamaUrl !== undefined && { ollamaUrl }),
     ...(translationModel !== undefined && { translationModel }),
     ...(customProfiles && { translationProfiles: customProfiles }),
+    ...(ocrAdapter && { ocrAdapter }),
     verbose: process.env.POLYOCR_VERBOSE === '1'
   });
   await pocr.ready();
@@ -355,7 +394,10 @@ Options (process | batch | detect):
   --inpaint <mode>       chroma|blur|fill|clone
   --workers <n>          Tesseract worker count (default 2)
   --concurrency <n>      Batch concurrency (default = workers)
-  --langs <list>         Tesseract languages (default eng)
+  --langs <list>         Tesseract languages (default eng) — ignored when --ocr=paddle
+  --ocr <engine>         tesseract (default) | paddle
+  --paddle-lang <code>   PaddleOCR language code (default en) — used when --ocr=paddle
+  --python <path>        Override Python binary for the PaddleOCR bridge
   --ollama <url>         Ollama base URL (default http://localhost:11434)
   --model <name>         Translation model (default aya:8b — see 'setup --list-models')
   --model-profile <file> JSON file of custom ModelProfile[] (merged in front of built-ins)
@@ -366,7 +408,9 @@ Options (process | batch | detect):
 Options (setup):
   --check                Diagnose only; exit 0 if ready, non-zero with reason
   --yes                  Skip confirmation prompts (CI / automation)
-  --model <name>         Pull this model instead of aya:8b
+  --paddle               Set up PaddleOCR (Python + pip deps) instead of Ollama
+  --python <path>        Override Python binary for --paddle setup
+  --model <name>         Pull this model instead of aya:8b (Ollama only)
   --model-profile <file> JSON file of custom ModelProfile[] entries
   --list-models          Print the built-in + custom profile registry and exit
   --ollama <url>         Probe this URL (must be local to install/start daemon)

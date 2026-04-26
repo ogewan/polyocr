@@ -15,7 +15,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { PolyOCR } from 'polyocr';
+import { PolyOCR, PaddleOCRAdapter } from 'polyocr';
 import type { Settings, ModelProfile } from './shared/types.js';
 
 /**
@@ -39,6 +39,21 @@ export async function buildPolyOCR(settings: Settings): Promise<PolyOCR> {
       );
     }
   }
+  // When the user has flipped the PaddleOCR toggle in Settings,
+  // construct a PaddleOCRAdapter and pass it as `ocrAdapter` so it
+  // overrides the built-in Tesseract default. The adapter spawns its
+  // Python bridge lazily on first recognize(), so construction here
+  // is cheap (no subprocess yet — that cost is paid the first time
+  // OCR runs against an image).
+  const ocrAdapter = settings.enablePaddleOCR
+    ? new PaddleOCRAdapter({
+        lang: settings.paddleocrLang,
+        ...(settings.paddleocrPythonPath !== null && {
+          pythonPath: settings.paddleocrPythonPath
+        })
+      })
+    : undefined;
+
   return new PolyOCR({
     ollamaUrl: settings.ollamaUrl,
     translationModel: settings.translationModel,
@@ -47,6 +62,7 @@ export async function buildPolyOCR(settings: Settings): Promise<PolyOCR> {
     tesseractLanguages: settings.tesseractLanguages,
     font: settings.font,
     ...(customProfiles && { translationProfiles: customProfiles }),
+    ...(ocrAdapter && { ocrAdapter }),
     verbose: process.env.POLYOCR_VERBOSE === '1'
   });
 }
@@ -70,6 +86,8 @@ export function pipelineRelevantChanged(a: Settings, b: Settings): boolean {
     a.visionModel !== b.visionModel ||
     a.workerCount !== b.workerCount ||
     a.enablePaddleOCR !== b.enablePaddleOCR ||
+    a.paddleocrLang !== b.paddleocrLang ||
+    a.paddleocrPythonPath !== b.paddleocrPythonPath ||
     JSON.stringify(a.tesseractLanguages) !== JSON.stringify(b.tesseractLanguages) ||
     JSON.stringify(a.font) !== JSON.stringify(b.font) ||
     a.customTranslationProfilesPath !== b.customTranslationProfilesPath
