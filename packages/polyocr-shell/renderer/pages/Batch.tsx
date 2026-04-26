@@ -39,39 +39,47 @@ export function Batch({ settings }: BatchProps): JSX.Element {
 
   const sortedResults = [...results].sort((a, b) => a.index - b.index);
 
+  const [enumeratedFiles, setEnumeratedFiles] = useState<string[]>([]);
+  const [enumerating, setEnumerating] = useState(false);
+
   const onPickDir = async () => {
     const picked = await window.shell.openDirectoryPicker();
-    if (picked) {
-      setDir(picked);
-      setResults([]);
-      setError(null);
-      setCompleted(0);
-      setTotal(0);
+    if (!picked) return;
+    setDir(picked);
+    setResults([]);
+    setError(null);
+    setCompleted(0);
+    setTotal(0);
+    setEnumerating(true);
+    try {
+      const files = await window.shell.listImagesInDir(picked);
+      setEnumeratedFiles(files);
+      setTotal(files.length);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setEnumeratedFiles([]);
+    } finally {
+      setEnumerating(false);
     }
   };
 
   const onRun = async () => {
-    if (!dir) return;
+    // Two source modes: either the user picked a directory (preferred —
+    // Batch is meant for "process this folder of frames"), or they
+    // multi-selected files via the alternate picker. Both end up as a
+    // string[] of absolute paths.
+    let files = enumeratedFiles;
+    if (files.length === 0) {
+      const picked = await window.shell.openFilePicker({ multi: true });
+      if (!picked || picked.length === 0) return;
+      files = picked;
+      setTotal(files.length);
+    }
     setRunning(true);
     setError(null);
     setResults([]);
     setCompleted(0);
     try {
-      // Enumerate the directory via main: openFilePicker won't work for
-      // a known directory's contents. Cheapest approach is to send the
-      // directory path to processBatch — polyocr's CLI listImagesIn
-      // utility isn't exported, so we'd need a new IPC for this. For
-      // M3, use a workaround: ask main to enumerate by reusing the
-      // open-file-picker with the directory pre-selected. (M5 polish:
-      // add `shell:list-images-in-dir` IPC.)
-      // For now, fall back to picking files via picker until that IPC
-      // exists.
-      const files = await window.shell.openFilePicker({ multi: true });
-      if (!files || files.length === 0) {
-        setRunning(false);
-        return;
-      }
-      setTotal(files.length);
       await window.polyocr.stream(
         files,
         {
@@ -132,6 +140,13 @@ export function Batch({ settings }: BatchProps): JSX.Element {
           <span className="text-sm text-slate-600 font-mono truncate">
             {dir ?? <span className="text-slate-400">(none selected)</span>}
           </span>
+          {dir && (
+            <span className="text-xs text-slate-500">
+              {enumerating
+                ? 'enumerating…'
+                : `${enumeratedFiles.length} image${enumeratedFiles.length === 1 ? '' : 's'}`}
+            </span>
+          )}
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">

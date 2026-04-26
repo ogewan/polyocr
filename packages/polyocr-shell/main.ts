@@ -42,8 +42,8 @@ import {
   desktopCapturer,
   screen
 } from 'electron';
-import { join } from 'node:path';
-import { writeFile, readFile } from 'node:fs/promises';
+import { join, extname } from 'node:path';
+import { writeFile, readFile, readdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { PolyOCR } from 'polyocr';
 import type {
@@ -59,6 +59,7 @@ import { runSetup, formatProfileList, listProfiles } from 'polyocr/setup';
 import type { SetupOptions, PullProgress } from 'polyocr/setup';
 import { ShellDb } from './db.js';
 import { serializeResult } from './serialize.js';
+import { buildPolyOCR, pipelineRelevantChanged } from './pipeline.js';
 import type {
   Settings,
   ModelProfile,
@@ -78,39 +79,12 @@ let activeHotkey: string | null = null;
 // ── PolyOCR lifecycle ───────────────────────────────────────────────────
 
 /**
- * Build a `PolyOCR` from current settings. Custom translation profiles
- * are loaded from the configured JSON file path (best-effort — a
- * missing or malformed file is logged and skipped, not fatal).
- */
-async function buildPolyOCR(settings: Settings): Promise<PolyOCR> {
-  let customProfiles: ModelProfile[] | undefined;
-  if (settings.customTranslationProfilesPath) {
-    try {
-      const raw = await readFile(settings.customTranslationProfilesPath, 'utf8');
-      const parsed = JSON.parse(raw) as ModelProfile[];
-      if (Array.isArray(parsed)) customProfiles = parsed;
-    } catch (cause) {
-      console.warn(
-        `[shell/main] failed to load custom translation profiles from ${settings.customTranslationProfilesPath}:`,
-        cause instanceof Error ? cause.message : cause
-      );
-    }
-  }
-  return new PolyOCR({
-    ollamaUrl: settings.ollamaUrl,
-    translationModel: settings.translationModel,
-    visionModel: settings.visionModel,
-    workerCount: settings.workerCount,
-    tesseractLanguages: settings.tesseractLanguages,
-    font: settings.font,
-    ...(customProfiles && { translationProfiles: customProfiles }),
-    verbose: process.env.POLYOCR_VERBOSE === '1'
-  });
-}
-
-/**
  * Tear down the existing PolyOCR (if any) and rebuild from current
  * settings. Called when the user saves Settings.
+ *
+ * The actual `buildPolyOCR(settings)` factory lives in `pipeline.ts`
+ * so the smoke test can construct a PolyOCR from a Settings object
+ * without importing Electron.
  */
 async function reinstantiatePolyOCR(): Promise<void> {
   await pocr?.dispose();
@@ -363,21 +337,34 @@ function registerShellHandlers(): void {
   );
 
   ipcMain.handle('shell:clear-history', () => db!.clearHistory());
-}
 
-/** Returns true if any field that the PolyOCR constructor consumes changed. */
-function pipelineRelevantChanged(a: Settings, b: Settings): boolean {
-  return (
-    a.ollamaUrl !== b.ollamaUrl ||
-    a.translationModel !== b.translationModel ||
-    a.visionModel !== b.visionModel ||
-    a.workerCount !== b.workerCount ||
-    a.enablePaddleOCR !== b.enablePaddleOCR ||
-    JSON.stringify(a.tesseractLanguages) !== JSON.stringify(b.tesseractLanguages) ||
-    JSON.stringify(a.font) !== JSON.stringify(b.font) ||
-    a.customTranslationProfilesPath !== b.customTranslationProfilesPath
+  /**
+   * Enumerate image files inside a directory. Matches the same
+   * extensions the CLI's `polyocr batch` accepts (see
+   * `listImagesIn` in the polyocr cli.ts). Used by the renderer's
+   * Batch page directory picker — the renderer can't list a
+   * directory through `dialog.showOpenDialog`'s file-picker mode,
+   * so this IPC fills the gap.
+   */
+  ipcMain.handle(
+    'shell:list-images-in-dir',
+    async (_event, dirPath: string): Promise<string[]> => {
+      const entries = await readdir(dirPath);
+      const matches: string[] = [];
+      for (const name of entries) {
+        if (!IMAGE_EXTENSIONS.test(extname(name))) continue;
+        const abs = join(dirPath, name);
+        const s = await stat(abs).catch(() => null);
+        if (s && s.isFile()) matches.push(abs);
+      }
+      // Sort for predictable order — directory enumeration on
+      // Windows can return mixed order; the user expects alphabetical.
+      return matches.sort();
+    }
   );
 }
+
+const IMAGE_EXTENSIONS = /^\.(png|jpe?g|webp|bmp|tiff?|gif)$/i;
 
 // ── Screenshot OCR ──────────────────────────────────────────────────────
 

@@ -23,6 +23,8 @@
     "preload.ts",
     "db.ts",
     "serialize.ts",
-    "shared/**/*"
+    "pipeline.ts",
+    "shared/**/*",
+    "scripts/**/*"
   ]
 }

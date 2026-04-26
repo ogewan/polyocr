@@ -116,6 +116,14 @@ export interface ShellBridge {
   getHistory(limit?: number): Promise<SessionRecord[]>;
   getSessionResults(sessionId: string): Promise<ResultRecord[]>;
   clearHistory(): Promise<void>;
+
+  /**
+   * List image files (png/jpg/jpeg/webp/bmp/tiff/gif) directly inside
+   * `dirPath`. Returns absolute paths sorted alphabetically. Does NOT
+   * recurse — Phase 5 only needs flat enumeration for batch-mode
+   * directories.
+   */
+  listImagesInDir(dirPath: string): Promise<string[]>;
 }
 
 declare global {

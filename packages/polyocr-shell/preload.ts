@@ -110,7 +110,8 @@ const shellBridge: ShellBridge = {
   getHistory: (limit) => ipcRenderer.invoke('shell:get-history', limit ?? 100),
   getSessionResults: (sessionId) =>
     ipcRenderer.invoke('shell:get-session-results', sessionId),
-  clearHistory: () => ipcRenderer.invoke('shell:clear-history')
+  clearHistory: () => ipcRenderer.invoke('shell:clear-history'),
+  listImagesInDir: (dirPath) => ipcRenderer.invoke('shell:list-images-in-dir', dirPath)
 };
 
 contextBridge.exposeInMainWorld('polyocr', polyocrBridge);

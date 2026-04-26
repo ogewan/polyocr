@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build && tsc -p tsconfig.main.json",
     "build:installer": "electron-builder",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
     "polyocr": "*",
