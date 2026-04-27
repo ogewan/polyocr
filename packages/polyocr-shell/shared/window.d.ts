@@ -29,7 +29,12 @@ import type {
   RegionReference,
   BoundingBox
 } from 'polyocr';
-import type { SetupOptions, SetupResult } from 'polyocr/setup';
+import type {
+  SetupOptions,
+  SetupResult,
+  PaddleSetupOptions,
+  PaddleSetupResult
+} from 'polyocr/setup';
 
 /**
  * Renderer-callable surface for `pocr.process` / `processBatch` /
@@ -84,6 +89,18 @@ export interface PolyOCRBridge {
     options: SetupOptions,
     onProgress?: (event: SetupProgressEvent) => void
   ): Promise<SetupResult>;
+
+  /**
+   * Run `polyocr setup --paddle` from the renderer. Streams pip-install
+   * output via `onProgress` (kind: 'log') and emits a final
+   * `kind: 'done'` event with the exit code. Resolves with the structured
+   * `PaddleSetupResult` so the caller can branch on
+   * `status: 'ready' | 'installed' | 'failed' | 'declined'`.
+   */
+  setupPaddle(
+    options: PaddleSetupOptions,
+    onProgress?: (event: SetupProgressEvent) => void
+  ): Promise<PaddleSetupResult>;
 
   /** Plain-text dump of the built-in + custom translation profile registry. */
   listProfiles(): Promise<string>;

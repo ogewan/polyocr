@@ -96,6 +96,23 @@ const polyocrBridge: PolyOCRBridge = {
       });
   },
 
+  setupPaddle: (options, onProgress) => {
+    // Same correlation-id pattern as `setup`. Both flows publish on
+    // `polyocr:setup:event:${id}` so the renderer's SetupModal can
+    // subscribe uniformly regardless of which one's running.
+    const id = crypto.randomUUID();
+    const channel = `polyocr:setup:event:${id}`;
+    const handler = (_e: IpcRendererEvent, event: SetupProgressEvent) => {
+      onProgress?.(event);
+    };
+    ipcRenderer.on(channel, handler);
+    return ipcRenderer
+      .invoke('polyocr:setup-paddle', { id, options })
+      .finally(() => {
+        ipcRenderer.off(channel, handler);
+      });
+  },
+
   listProfiles: () => ipcRenderer.invoke('polyocr:list-profiles'),
   getProfiles: () => ipcRenderer.invoke('polyocr:get-profiles')
 };

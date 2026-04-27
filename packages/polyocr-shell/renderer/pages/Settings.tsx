@@ -34,7 +34,9 @@ interface SettingsPageProps {
 export function Settings({ settings, onSaved }: SettingsPageProps): JSX.Element {
   const [draft, setDraft] = useState<Settings>(settings);
   const [profiles, setProfiles] = useState<ModelProfile[]>([]);
-  const [setupOpen, setSetupOpen] = useState(false);
+  // null = closed; otherwise carries which flow is running so the modal
+  // shows the right title and dispatches to the right runner.
+  const [setupOpen, setSetupOpen] = useState<null | 'ollama' | 'paddle'>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => setDraft(settings), [settings]);
@@ -101,7 +103,7 @@ export function Settings({ settings, onSaved }: SettingsPageProps): JSX.Element 
               )}
             </select>
             <button
-              onClick={() => setSetupOpen(true)}
+              onClick={() => setSetupOpen('ollama')}
               className="px-3 py-1 bg-brand-500 text-white rounded hover:bg-brand-600"
             >
               Run setup
@@ -180,6 +182,16 @@ export function Settings({ settings, onSaved }: SettingsPageProps): JSX.Element 
                   </button>
                 </div>
               </div>
+              <button
+                onClick={() => setSetupOpen('paddle')}
+                className="px-3 py-1 bg-brand-500 text-white rounded hover:bg-brand-600 text-xs"
+              >
+                Setup PaddleOCR
+              </button>
+              <p className="text-[11px] text-slate-500">
+                Probes Python + paddleocr/fastapi/uvicorn/pillow imports.
+                Runs `pip install --user` if any are missing.
+              </p>
             </div>
           )}
         </Field>
@@ -363,11 +375,33 @@ export function Settings({ settings, onSaved }: SettingsPageProps): JSX.Element 
         </button>
       </div>
 
-      {setupOpen && (
+      {setupOpen === 'ollama' && (
         <SetupModal
-          ollamaUrl={draft.ollamaUrl}
-          model={draft.translationModel}
-          onClose={() => setSetupOpen(false)}
+          title={`polyocr setup — ${draft.translationModel}`}
+          runner={(onProgress) =>
+            window.polyocr.setup(
+              { ollamaUrl: draft.ollamaUrl, model: draft.translationModel, yes: true },
+              onProgress
+            )
+          }
+          onClose={() => setSetupOpen(null)}
+        />
+      )}
+      {setupOpen === 'paddle' && (
+        <SetupModal
+          title="polyocr setup — paddleocr"
+          runner={(onProgress) =>
+            window.polyocr.setupPaddle(
+              {
+                ...(draft.paddleocrPythonPath !== null && {
+                  pythonPath: draft.paddleocrPythonPath
+                }),
+                yes: true
+              },
+              onProgress
+            )
+          }
+          onClose={() => setSetupOpen(null)}
         />
       )}
     </div>
@@ -440,17 +474,27 @@ function HotkeyRecorder({
 }
 
 /**
- * Modal that drives `window.polyocr.setup(...)` and renders streamed
- * progress events. Closes itself on `done` or `error` after a short
- * delay so the user can read the final message.
+ * Modal that drives a setup runner (Ollama or Paddle) and renders
+ * streamed progress events. Closes when the user hits Close or ✕
+ * after the runner resolves.
+ *
+ * # Why a `runner` prop instead of branching on flow inside
+ *   The two flows (Ollama install + model pull, vs Paddle pip
+ *   install) have different option shapes and result types. Hoisting
+ *   the runner to a prop means the modal only knows about
+ *   `SetupProgressEvent` (uniform) and a final
+ *   `{ message, exitCode }`-like result. Future setup flows (DeepL
+ *   API key check, custom adapter config) plug in without touching
+ *   this component.
  */
+type SetupRunResult = { message: string; exitCode: number };
 function SetupModal({
-  ollamaUrl,
-  model,
+  title,
+  runner,
   onClose
 }: {
-  ollamaUrl: string;
-  model: string;
+  title: string;
+  runner: (onProgress: (event: SetupProgressEvent) => void) => Promise<SetupRunResult>;
   onClose: () => void;
 }): JSX.Element {
   const [log, setLog] = useState<string[]>([]);
@@ -467,8 +511,7 @@ function SetupModal({
         setPull(next);
       }
     };
-    window.polyocr
-      .setup({ ollamaUrl, model, yes: true }, onProgress)
+    runner(onProgress)
       .then((result) => {
         setLog((prev) => [...prev, `\n${result.message}`]);
       })
@@ -479,13 +522,17 @@ function SetupModal({
         ]);
       })
       .finally(() => setRunning(false));
-  }, [ollamaUrl, model]);
+    // runner identity changes per modal open (parent re-creates the
+    // closure each render). We deliberately depend only on mount —
+    // re-running mid-modal would replay the install.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-10">
       <div className="bg-white rounded shadow-lg w-[600px] max-h-[80vh] flex flex-col">
         <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center">
-          <h3 className="font-semibold">polyocr setup — {model}</h3>
+          <h3 className="font-semibold">{title}</h3>
           <button
             onClick={onClose}
             disabled={running}

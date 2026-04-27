@@ -55,8 +55,8 @@ import type {
   BoundingBox,
   ProcessTimings
 } from 'polyocr';
-import { runSetup, formatProfileList, listProfiles } from 'polyocr/setup';
-import type { SetupOptions, PullProgress } from 'polyocr/setup';
+import { runSetup, runPaddleSetup, formatProfileList, listProfiles } from 'polyocr/setup';
+import type { SetupOptions, PaddleSetupOptions, PullProgress } from 'polyocr/setup';
 import { ShellDb } from './db.js';
 import { serializeResult } from './serialize.js';
 import { buildPolyOCR, pipelineRelevantChanged } from './pipeline.js';
@@ -236,6 +236,36 @@ function registerPipelineHandlers(): void {
       // Setup may have changed the model — reinstantiate so the
       // PolyOCR we hand future calls to picks up the new translator.
       if (result.status === 'ready' || result.status === 'pulled' || result.status === 'installed') {
+        await reinstantiatePolyOCR();
+      }
+      send({ kind: 'done', exitCode: result.exitCode });
+      return result;
+    }
+  );
+
+  // Paddle setup IPC. Sibling to `polyocr:setup` — same correlation-id
+  // event pattern, same channel naming so the renderer's SetupModal
+  // can listen on `polyocr:setup:event:${id}` regardless of which flow
+  // is running. PaddleSetupResult emits no `pull-progress` events
+  // (paddle has no model registry); only `log` and `done`.
+  ipcMain.handle(
+    'polyocr:setup-paddle',
+    async (event, payload: { id: string; options: PaddleSetupOptions }) => {
+      const { id, options } = payload;
+      const channel = `polyocr:setup:event:${id}`;
+      const send = (e: SetupProgressEvent) => {
+        if (!event.sender.isDestroyed()) event.sender.send(channel, e);
+      };
+      const result = await runPaddleSetup({
+        ...options,
+        log: (line: string) => send({ kind: 'log', message: line }),
+        prompt: async () => true,
+        yes: true
+      });
+      // pip install changes which OCR adapter `enablePaddleOCR` will
+      // produce on next construction — reinstantiate so the live
+      // PolyOCR picks up the now-working bridge without a restart.
+      if (result.status === 'ready' || result.status === 'installed') {
         await reinstantiatePolyOCR();
       }
       send({ kind: 'done', exitCode: result.exitCode });
