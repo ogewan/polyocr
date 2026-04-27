@@ -22,6 +22,7 @@
 
 import { spawn, ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import type {
@@ -204,16 +205,29 @@ function defaultPython(): string {
 }
 
 function resolveDefaultServerPath(): string {
-  // The compiled package layout puts `bridge/` next to the `dist/` it
-  // emits. During dev (running from src/) the bridge is two levels up.
-  // We resolve relative to this file's URL — works in both cases.
-  try {
-    const here = dirname(fileURLToPath(import.meta.url));
-    return resolve(here, '..', '..', 'bridge', 'paddleocr_server.py');
-  } catch {
-    // CJS fallback: __dirname is set by the bundler.
-    return resolve(__dirname, '..', '..', 'bridge', 'paddleocr_server.py');
-  }
+  // Two candidate layouts:
+  //   bundled (vite output):  packages/polyocr/dist/<chunk>.cjs
+  //                          → '../bridge/paddleocr_server.py'
+  //   src (running via tsx):  packages/polyocr/src/ocr/paddleocr.ts
+  //                          → '../../bridge/paddleocr_server.py'
+  //
+  // Earlier versions hardcoded '../../' which works in src mode but
+  // resolves to packages/bridge/... in bundled mode (one level too
+  // high). We probe both candidates with existsSync and return the
+  // first match. If neither exists we return the bundled path so the
+  // spawn error surfaces a clear ENOENT.
+  const here = (() => {
+    try {
+      return dirname(fileURLToPath(import.meta.url));
+    } catch {
+      return __dirname;
+    }
+  })();
+  const bundled = resolve(here, '..', 'bridge', 'paddleocr_server.py');
+  const src = resolve(here, '..', '..', 'bridge', 'paddleocr_server.py');
+  if (existsSync(bundled)) return bundled;
+  if (existsSync(src)) return src;
+  return bundled;
 }
 
 async function pickFreePort(): Promise<number> {

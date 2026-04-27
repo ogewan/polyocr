@@ -339,6 +339,11 @@ async function probeImports(pythonPath: string): Promise<Record<RequiredPackage,
   const out = await new Promise<string>((resolve) => {
     const child = spawn(pythonPath, ['-c', script], { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
+    // 30s — paddleocr's first cold import on Windows loads native
+    // backends (paddle, ONNX, opencv-contrib) which can take 15-25s.
+    // Subsequent imports use bytecode cache and are fast. 8s was too
+    // aggressive and caused false-positive deps-missing on fresh
+    // post-install probes.
     const timer = setTimeout(() => {
       try {
         child.kill();
@@ -346,7 +351,7 @@ async function probeImports(pythonPath: string): Promise<Record<RequiredPackage,
         /* ignore */
       }
       resolve('');
-    }, 8000);
+    }, 30_000);
     child.stdout.on('data', (d) => {
       stdout += d.toString();
     });
