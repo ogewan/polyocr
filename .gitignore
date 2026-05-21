@@ -56,6 +56,14 @@ logs/
 # Misc
 samples/
 sample-output/
+
+# LLM/agent docs hidden per --hide-bots
+CLAUDE.md
+AGENTS.md
 ARCHITECTURE.md
-NEXT_PHASES_PROMPT.md
-CONTINUATION_PROMPT.md
+CURRENT.md
+
+# Archived planning prompts
+NEXT_PHASES_PROMPT*.md
+CONTINUATION_PROMPT*.md
+.claude-rules-audit.md
